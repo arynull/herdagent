@@ -1,0 +1,49 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install ruff
+      - run: ruff check src/ && ruff format --check src/
+
+  install-and-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Clean install from source
+        run: |
+          python -m venv /tmp/ci-venv
+          /tmp/ci-venv/bin/pip install --quiet .
+          /tmp/ci-venv/bin/herdagent --version
+      - name: CLI smoke test (session / task / account / router)
+        run: |
+          export HERDAGENT_DATA_DIR="$(mktemp -d)"
+          HA=/tmp/ci-venv/bin/herdagent
+          $HA account add --provider claude --label main --limit-tokens-day 1000000 --json
+          $HA account add --provider claude --label backup --limit-tokens-day 500000 --json
+          $HA account report backup --tokens 490000
+          $HA account list | grep -q main
+          CHOSEN="$($HA route --provider claude --json | python3 -c "import json,sys; print(json.load(sys.stdin)['account'])")"
+          test "$CHOSEN" = "main" || { echo "router chose $CHOSEN, expected main"; exit 1; }
+          $HA session start --name s1 --backend sleep --cwd /tmp --json
+          $HA session list | grep -q s1
+          $HA task add --title "review auth" --json
+          $HA task claim 1 --session s1
+          $HA session migrate s1 --to backup
+          $HA task done 1
+          $HA session stop s1
+          $HA events --limit 5 | grep -q migrate
+          echo "smoke OK"

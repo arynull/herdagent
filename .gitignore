@@ -1,0 +1,18 @@
+# ops / local-only files — never committed
+tests/
+MISSION.md
+SPEC.md
+RUNBOOK.md
+PROGRESS.md
+ERROR_LOG.md
+RESEARCH.md
+prompts/
+.telegram.env
+*.pyc
+__pycache__/
+.venv/
+dist/
+build/
+*.egg-info/
+.aider*
+.pytest_cache/
