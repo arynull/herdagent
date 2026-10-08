@@ -1,0 +1,26 @@
+[project]
+name = "herdagent"
+version = "0.1.0"
+description = "Local-first Agent Fleet Command Center"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [{ name = "arynull" }]
+keywords = ["agents", "fleet", "cli"]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+]
+
+[project.scripts]
+herdagent = "herdagent.cli:main"
+
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.ruff]
+line-length = 88
