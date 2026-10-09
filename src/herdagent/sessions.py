@@ -62,6 +62,8 @@ def start(
     branch: str = "",
     account_label: str | None = None,
     sandbox_profile: str = "standard",
+    tokens_cap=None,
+    cost_cap_usd=None,
 ) -> int:
     if sandbox_profile not in sandbox.PROFILES:
         raise ValueError(f"unknown sandbox profile: {sandbox_profile}")
@@ -99,9 +101,23 @@ def start(
     ts = now_iso()
     cur = conn.execute(
         "INSERT INTO sessions(name, backend, cwd, branch, account_label,"
-        " status, pid, started_at, last_heartbeat, sandbox_profile)"
-        " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-        (name, backend, cwd, branch, chosen, status, pid, ts, ts, sandbox_profile),
+        " status, pid, started_at, last_heartbeat, sandbox_profile,"
+        " tokens_cap, cost_cap_usd)"
+        " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        (
+            name,
+            backend,
+            cwd,
+            branch,
+            chosen,
+            status,
+            pid,
+            ts,
+            ts,
+            sandbox_profile,
+            tokens_cap,
+            cost_cap_usd,
+        ),
     )
     conn.commit()
     log_event(

@@ -8,7 +8,7 @@ All state lives in one SQLite file under `$HERDAGENT_DATA_DIR` (default `~/.herd
 
 ```bash
 pip install .
-herdagent --version   # herdagent 0.1.0
+herdagent --version   # herdagent 0.3.0
 ```
 
 ## Quickstart
@@ -55,6 +55,12 @@ Start with a profile: herdagent session start --name s1 --backend my-agent-cli -
 
 If bwrap is missing, the session launches unsandboxed, a warning is printed to stderr, and a sandbox_unavailable event is logged. Use herdagent sandbox check and herdagent sandbox profiles to inspect support.
 
+## Cost guards
+
+Sessions can carry token and USD caps. Set caps at start with --tokens-cap and --cost-cap-usd, or later with session cap. Report usage with session report-usage; use cost summary for a spend-attribution table of used versus cap per session.
+
+At 80% of any token cap the first crossing logs a cost_warn event. At 100% of any cap the session auto-stops (process group terminated, status stopped) and logs a cost_cap_hit event. Raising the token cap via session cap resets the 80% warning. Clearing caps uses session cap --clear. Cap changes log cost_cap_set and cost_cap_cleared events.
+
 ## Command reference
 
 Every list/status/route/add command also accepts `--json` for scripting.
@@ -81,11 +87,14 @@ Routing rules: among `active` accounts for the provider, the highest headroom wi
 **Sessions**
 
 ```bash
-herdagent session start --name s1 --backend my-agent-cli --cwd ~/work/proj [--branch feat-x] [--account main] [--sandbox-profile none|standard|strict]
+herdagent session start --name s1 --backend my-agent-cli --cwd ~/work/proj [--branch feat-x] [--account main] [--sandbox-profile none|standard|strict] [--tokens-cap 5000] [--cost-cap-usd 0.5]
 herdagent session list
-herdagent session status s1                # shows the sandbox profile
+herdagent session status s1                # shows the sandbox profile and cost used/cap
 herdagent session stop s1
 herdagent session migrate s1 --to backup   # rebinds account, logs an audit event
+herdagent session cap s1 --tokens-cap 5000 --cost-cap-usd 0.5
+herdagent session report-usage s1 --tokens 250 [--cost-usd 0.01]
+herdagent cost summary
 ```
 
 `sandbox-profile` defaults to `standard`. Profiles are documented under "Sandboxed execution" above; when bwrap is missing the session runs unsandboxed with a stderr warning.
@@ -111,7 +120,7 @@ herdagent task done 1
 **Events & dashboard**
 
 ```bash
-herdagent events [--limit 20]          # newest first: routes, migrations, 429s, status changes
+herdagent events [--limit 20]          # newest first: routes, migrations, 429s, status changes, cost_warn, cost_cap_hit
 herdagent dashboard                    # curses TUI: sessions, queue, quota bars, event feed
 ```
 
@@ -121,7 +130,7 @@ herdagent dashboard                    # curses TUI: sessions, queue, quota bars
 
 ## Roadmap
 
-v0.2.0 adds sandboxed execution (bubblewrap profiles per session). Next: per-session cost guards, agent identity & governance (scoped identities, hash-chained audit), swarm planning, skills marketplace client, web dashboard, provider adapters.
+v0.2.0 adds sandboxed execution (bubblewrap profiles per session). v0.3.0 adds per-session cost guards (token/USD caps, warn at 80%, auto-stop at 100%). Next: agent identity & governance (scoped identities, hash-chained audit), swarm planning, skills marketplace client, web dashboard, provider adapters.
 
 ## License
 

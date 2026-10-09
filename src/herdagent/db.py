@@ -83,3 +83,12 @@ def init_db(conn: sqlite3.Connection) -> None:
         )
         conn.execute("INSERT OR REPLACE INTO meta(k, v) VALUES ('schema_version', '2')")
         conn.commit()
+    cols = [r["name"] for r in conn.execute("PRAGMA table_info(sessions)").fetchall()]
+    if "tokens_cap" not in cols:
+        conn.execute("ALTER TABLE sessions ADD COLUMN tokens_cap INTEGER")
+        conn.execute("ALTER TABLE sessions ADD COLUMN cost_cap_usd REAL")
+        conn.execute("ALTER TABLE sessions ADD COLUMN used_tokens INTEGER DEFAULT 0")
+        conn.execute("ALTER TABLE sessions ADD COLUMN used_cost_usd REAL DEFAULT 0")
+        conn.execute("ALTER TABLE sessions ADD COLUMN warned_80 INTEGER DEFAULT 0")
+        conn.execute("INSERT OR REPLACE INTO meta(k, v) VALUES ('schema_version', '3')")
+        conn.commit()

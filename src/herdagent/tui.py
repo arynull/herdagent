@@ -95,6 +95,19 @@ def run_dashboard(conn_factory) -> None:
                     f"{r['name']} {r['backend']} {r['status']} "
                     f"{r['account_label'] or ''}"
                 )
+                d = dict(r)
+                cap = d.get("tokens_cap")
+                try:
+                    cap_f = float(cap) if cap is not None else None
+                except (TypeError, ValueError):
+                    cap_f = None
+                if cap_f is not None and cap_f > 0:
+                    used = d.get("used_tokens") or 0
+                    try:
+                        pct = round(float(used) / cap_f * 100)
+                    except (TypeError, ValueError, ZeroDivisionError):
+                        pct = 0
+                    line += f" cost={used}/{cap} {pct}%"
                 _put(stdscr, y, 0, line, max_x)
                 y += 1
             y = pane

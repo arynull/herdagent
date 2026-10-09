@@ -5,6 +5,7 @@ import sys
 from herdagent import (
     __version__,
     accounts,
+    costguards,
     db,
     events,
     router,
@@ -186,6 +187,8 @@ def handle_session_start(args, conn) -> int:
         branch=args.branch,
         account_label=args.account,
         sandbox_profile=args.sandbox_profile,
+        tokens_cap=args.tokens_cap,
+        cost_cap_usd=args.cost_cap_usd,
     )
     row = sessions.get(conn, args.name)
     status = row["status"] if row is not None else "running"
@@ -237,7 +240,30 @@ def handle_session_status(args, conn) -> int:
     if args.json:
         _dump(dict(row))
     else:
-        headers = ["Name", "Backend", "Status", "Account", "PID", "CWD", "Sandbox"]
+        d = dict(row)
+        cap = d.get("tokens_cap")
+        used = d.get("used_tokens") or 0
+        if cap is not None:
+            try:
+                cap_f = float(cap)
+            except (TypeError, ValueError):
+                cap_f = None
+        else:
+            cap_f = None
+        if cap_f is not None and cap_f > 0:
+            cost_cell = f"{used}/{cap} ({round(float(used) / cap_f * 100)}%)"
+        else:
+            cost_cell = "—"
+        headers = [
+            "Name",
+            "Backend",
+            "Status",
+            "Account",
+            "PID",
+            "CWD",
+            "Sandbox",
+            "Cost",
+        ]
         data = [
             [
                 row["name"],
@@ -247,6 +273,7 @@ def handle_session_status(args, conn) -> int:
                 row["pid"] or "",
                 row["cwd"],
                 dict(row).get("sandbox_profile") or "",
+                cost_cell,
             ]
         ]
         _print_table(headers, data)
@@ -263,6 +290,84 @@ def handle_session_migrate(args, conn) -> int:
     old, new = sessions.migrate(conn, args.name, args.to_account)
     print(f"migrated {args.name} from {old} to {new}")
     print(f"restart the backend CLI under the new account: {new}")
+    return 0
+
+
+def handle_session_cap(args, conn) -> int:
+    if args.clear:
+        costguards.clear_cap(conn, args.name)
+        if args.json:
+            _dump(costguards.status_row(conn, args.name))
+        else:
+            print(f"cleared caps for {args.name}")
+        return 0
+    if args.tokens_cap is None and args.cost_cap_usd is None:
+        print(
+            "error: provide --tokens-cap or --cost-cap-usd or --clear", file=sys.stderr
+        )
+        return 1
+    costguards.set_cap(
+        conn, args.name, tokens_cap=args.tokens_cap, cost_cap_usd=args.cost_cap_usd
+    )
+    if args.json:
+        _dump(costguards.status_row(conn, args.name))
+    else:
+        print(f"set caps for {args.name}")
+    return 0
+
+
+def handle_session_report_usage(args, conn) -> int:
+    result = costguards.report_usage(
+        conn, args.name, args.tokens, cost_usd=args.cost_usd
+    )
+    if args.json:
+        _dump({"name": args.name, **result})
+    else:
+        print(f"reported {args.tokens} tokens for {args.name}")
+        if result["warned"]:
+            print(
+                f"warning: session {args.name} crossed 80% of its cost cap",
+                file=sys.stderr,
+            )
+        if result["stopped"]:
+            print(f"stopped {args.name}: cost cap reached")
+    return 0
+
+
+def handle_cost_summary(args, conn) -> int:
+    rows = costguards.summary(conn)
+    if args.json:
+        _dump(rows)
+    else:
+        headers = [
+            "Name",
+            "TokensUsed",
+            "TokensCap",
+            "Token%",
+            "CostUsed",
+            "CostCap",
+            "Cost%",
+        ]
+        data = []
+        for r in rows:
+            token_pct = r.get("token_pct")
+            cost_pct = r.get("cost_pct")
+            token_cell = "" if token_pct is None else f"{round(token_pct * 100)}%"
+            cost_cell = "" if cost_pct is None else f"{round(cost_pct * 100)}%"
+            tokens_cap = r.get("tokens_cap")
+            cost_cap = r.get("cost_cap_usd")
+            data.append(
+                [
+                    r.get("name") or "",
+                    r.get("used_tokens") or 0,
+                    "" if tokens_cap is None else tokens_cap,
+                    token_cell,
+                    r.get("used_cost_usd") or 0,
+                    "" if cost_cap is None else cost_cap,
+                    cost_cell,
+                ]
+            )
+        _print_table(headers, data)
     return 0
 
 
@@ -413,6 +518,10 @@ def build_parser() -> argparse.ArgumentParser:
         default="standard",
         choices=["none", "standard", "strict"],
     )
+    s_start.add_argument("--tokens-cap", dest="tokens_cap", type=int, default=None)
+    s_start.add_argument(
+        "--cost-cap-usd", dest="cost_cap_usd", type=float, default=None
+    )
     s_start.add_argument("--json", action="store_true")
     s_start.set_defaults(func=handle_session_start)
 
@@ -433,6 +542,21 @@ def build_parser() -> argparse.ArgumentParser:
     s_mig.add_argument("name")
     s_mig.add_argument("--to", dest="to_account", required=True)
     s_mig.set_defaults(func=handle_session_migrate)
+
+    s_cap = sp_sub.add_parser("cap", help="set cost caps")
+    s_cap.add_argument("name")
+    s_cap.add_argument("--tokens-cap", dest="tokens_cap", type=int, default=None)
+    s_cap.add_argument("--cost-cap-usd", dest="cost_cap_usd", type=float, default=None)
+    s_cap.add_argument("--clear", action="store_true")
+    s_cap.add_argument("--json", action="store_true")
+    s_cap.set_defaults(func=handle_session_cap)
+
+    s_rep = sp_sub.add_parser("report-usage", help="report usage")
+    s_rep.add_argument("name")
+    s_rep.add_argument("--tokens", type=int, required=True)
+    s_rep.add_argument("--cost-usd", dest="cost_usd", type=float, default=None)
+    s_rep.add_argument("--json", action="store_true")
+    s_rep.set_defaults(func=handle_session_report_usage)
 
     tp = sub.add_parser("task", help="manage tasks")
     tp_sub = tp.add_subparsers(dest="task_cmd", required=True)
@@ -464,6 +588,12 @@ def build_parser() -> argparse.ArgumentParser:
 
     dash = sub.add_parser("dashboard", help="launch dashboard")
     dash.set_defaults(func=handle_dashboard)
+
+    cp = sub.add_parser("cost", help="cost guards")
+    cp_sub = cp.add_subparsers(dest="cost_cmd", required=True)
+    c_sum = cp_sub.add_parser("summary", help="show spend summary")
+    c_sum.add_argument("--json", action="store_true")
+    c_sum.set_defaults(func=handle_cost_summary)
 
     sb = sub.add_parser("sandbox", help="sandbox helpers")
     sb_sub = sb.add_subparsers(dest="sandbox_cmd", required=True)
