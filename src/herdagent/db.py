@@ -76,3 +76,10 @@ def init_db(conn: sqlite3.Connection) -> None:
     )
     conn.execute("INSERT OR IGNORE INTO meta(k, v) VALUES ('schema_version', '1')")
     conn.commit()
+    cols = [r["name"] for r in conn.execute("PRAGMA table_info(sessions)").fetchall()]
+    if "sandbox_profile" not in cols:
+        conn.execute(
+            "ALTER TABLE sessions ADD COLUMN sandbox_profile TEXT DEFAULT 'standard'"
+        )
+        conn.execute("INSERT OR REPLACE INTO meta(k, v) VALUES ('schema_version', '2')")
+        conn.commit()

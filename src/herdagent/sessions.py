@@ -1,9 +1,9 @@
 import os
 import signal
 import sqlite3
-import subprocess
 import time
 
+from herdagent import sandbox
 from herdagent.accounts import headroom, recently_429
 from herdagent.db import now_iso
 from herdagent.events import log as log_event
@@ -61,7 +61,10 @@ def start(
     cwd: str,
     branch: str = "",
     account_label: str | None = None,
+    sandbox_profile: str = "standard",
 ) -> int:
+    if sandbox_profile not in sandbox.PROFILES:
+        raise ValueError(f"unknown sandbox profile: {sandbox_profile}")
     if get(conn, name) is not None:
         raise ValueError(f"session already exists: {name}")
     if not os.path.isdir(cwd):
@@ -81,14 +84,9 @@ def start(
             raise ValueError(f"account not active: {chosen}")
     pid = None
     status = "exited"
+    sandboxed = False
     try:
-        proc = subprocess.Popen(
-            backend.split(),
-            cwd=cwd,
-            start_new_session=True,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-        )
+        proc, sandboxed = sandbox.launch(backend.split(), cwd, sandbox_profile)
         pid = proc.pid
         time.sleep(0.2)
         if proc.poll() is None:
@@ -101,12 +99,26 @@ def start(
     ts = now_iso()
     cur = conn.execute(
         "INSERT INTO sessions(name, backend, cwd, branch, account_label,"
-        " status, pid, started_at, last_heartbeat)"
-        " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-        (name, backend, cwd, branch, chosen, status, pid, ts, ts),
+        " status, pid, started_at, last_heartbeat, sandbox_profile)"
+        " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        (name, backend, cwd, branch, chosen, status, pid, ts, ts, sandbox_profile),
     )
     conn.commit()
-    log_event(conn, "session_start", session=name, account=chosen, detail=backend)
+    log_event(
+        conn,
+        "session_start",
+        session=name,
+        account=chosen,
+        detail=f"{backend} sandbox={sandbox_profile}:{'on' if sandboxed else 'off'}",
+    )
+    if not sandboxed and sandbox_profile != "none":
+        log_event(
+            conn,
+            "sandbox_unavailable",
+            session=name,
+            account=chosen,
+            detail=sandbox_profile,
+        )
     return int(cur.lastrowid)
 
 

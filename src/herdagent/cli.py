@@ -2,7 +2,16 @@ import argparse
 import json
 import sys
 
-from herdagent import __version__, accounts, db, events, router, sessions, tasks
+from herdagent import (
+    __version__,
+    accounts,
+    db,
+    events,
+    router,
+    sandbox,
+    sessions,
+    tasks,
+)
 
 
 def _conn():
@@ -176,6 +185,7 @@ def handle_session_start(args, conn) -> int:
         args.cwd,
         branch=args.branch,
         account_label=args.account,
+        sandbox_profile=args.sandbox_profile,
     )
     row = sessions.get(conn, args.name)
     status = row["status"] if row is not None else "running"
@@ -188,10 +198,13 @@ def handle_session_start(args, conn) -> int:
                 "backend": args.backend,
                 "account": acct,
                 "status": status,
+                "sandbox_profile": args.sandbox_profile,
             }
         )
     else:
         print(f"started session {args.name} (id {new_id}) on {acct}")
+    if args.sandbox_profile != "none" and not sandbox.available():
+        print("warning: bwrap not available, running unsandboxed", file=sys.stderr)
     return 0
 
 
@@ -224,7 +237,7 @@ def handle_session_status(args, conn) -> int:
     if args.json:
         _dump(dict(row))
     else:
-        headers = ["Name", "Backend", "Status", "Account", "PID", "CWD"]
+        headers = ["Name", "Backend", "Status", "Account", "PID", "CWD", "Sandbox"]
         data = [
             [
                 row["name"],
@@ -233,6 +246,7 @@ def handle_session_status(args, conn) -> int:
                 row["account_label"] or "",
                 row["pid"] or "",
                 row["cwd"],
+                dict(row).get("sandbox_profile") or "",
             ]
         ]
         _print_table(headers, data)
@@ -302,6 +316,24 @@ def handle_events(args, conn) -> int:
             for r in rows
         ]
         _print_table(headers, data)
+    return 0
+
+
+def handle_sandbox_profiles(args, conn) -> int:
+    del args
+    del conn
+    for profile in sandbox.PROFILES:
+        print(f"{profile}: {sandbox.profile_description(profile)}")
+    return 0
+
+
+def handle_sandbox_check(args, conn) -> int:
+    del args
+    del conn
+    if sandbox.available():
+        print("bwrap: available")
+    else:
+        print("bwrap: missing (sessions run unsandboxed)")
     return 0
 
 
@@ -376,6 +408,11 @@ def build_parser() -> argparse.ArgumentParser:
     s_start.add_argument("--cwd", required=True)
     s_start.add_argument("--branch", default="")
     s_start.add_argument("--account", default=None)
+    s_start.add_argument(
+        "--sandbox-profile",
+        default="standard",
+        choices=["none", "standard", "strict"],
+    )
     s_start.add_argument("--json", action="store_true")
     s_start.set_defaults(func=handle_session_start)
 
@@ -427,6 +464,13 @@ def build_parser() -> argparse.ArgumentParser:
 
     dash = sub.add_parser("dashboard", help="launch dashboard")
     dash.set_defaults(func=handle_dashboard)
+
+    sb = sub.add_parser("sandbox", help="sandbox helpers")
+    sb_sub = sb.add_subparsers(dest="sandbox_cmd", required=True)
+    sb_prof = sb_sub.add_parser("profiles", help="list sandbox profiles")
+    sb_prof.set_defaults(func=handle_sandbox_profiles)
+    sb_check = sb_sub.add_parser("check", help="check bwrap availability")
+    sb_check.set_defaults(func=handle_sandbox_check)
 
     return p
 

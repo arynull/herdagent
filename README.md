@@ -41,6 +41,20 @@ herdagent session stop s1
 herdagent dashboard
 ```
 
+## Sandboxed execution
+
+Sessions run under bubblewrap when bwrap is present.
+
+| Profile | Guarantee |
+| --- | --- |
+| none | no isolation, backend runs directly on host |
+| standard | read-only root with writable cwd and tmp plus isolated pid namespace |
+| strict | standard isolation plus no network access |
+
+Start with a profile: herdagent session start --name s1 --backend my-agent-cli --cwd ~/work/proj --sandbox-profile strict
+
+If bwrap is missing, the session launches unsandboxed, a warning is printed to stderr, and a sandbox_unavailable event is logged. Use herdagent sandbox check and herdagent sandbox profiles to inspect support.
+
 ## Command reference
 
 Every list/status/route/add command also accepts `--json` for scripting.
@@ -67,11 +81,20 @@ Routing rules: among `active` accounts for the provider, the highest headroom wi
 **Sessions**
 
 ```bash
-herdagent session start --name s1 --backend my-agent-cli --cwd ~/work/proj [--branch feat-x] [--account main]
+herdagent session start --name s1 --backend my-agent-cli --cwd ~/work/proj [--branch feat-x] [--account main] [--sandbox-profile none|standard|strict]
 herdagent session list
-herdagent session status s1
+herdagent session status s1                # shows the sandbox profile
 herdagent session stop s1
 herdagent session migrate s1 --to backup   # rebinds account, logs an audit event
+```
+
+`sandbox-profile` defaults to `standard`. Profiles are documented under "Sandboxed execution" above; when bwrap is missing the session runs unsandboxed with a stderr warning.
+
+**Sandbox**
+
+```bash
+herdagent sandbox profiles                 # list profiles and their guarantees
+herdagent sandbox check                    # bwrap available or missing
 ```
 
 `session start` launches the backend CLI as a local subprocess in `--cwd`. Omit `--account` and the router picks one. `migrate` checkpoints the session (cwd, branch, claimed tasks) into the event log and rebinds it — restart your backend CLI under the new account afterwards.
@@ -98,7 +121,7 @@ herdagent dashboard                    # curses TUI: sessions, queue, quota bars
 
 ## Roadmap
 
-v0.1.0 is the foundation plus the flagship subsystem (account pool, quota telemetry, failover router, migration, dashboard). Next: sandboxed execution, per-session cost guards, agent identity & governance (scoped identities, hash-chained audit), swarm planning, skills marketplace client, web dashboard, provider adapters.
+v0.2.0 adds sandboxed execution (bubblewrap profiles per session). Next: per-session cost guards, agent identity & governance (scoped identities, hash-chained audit), swarm planning, skills marketplace client, web dashboard, provider adapters.
 
 ## License
 
