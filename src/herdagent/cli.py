@@ -36,6 +36,7 @@ def _print_table(headers, rows) -> None:
 def _dump(obj) -> None:
     print(json.dumps(obj, separators=(",", ":")))
 
+
 def _positive_int(value: str) -> int:
     try:
         parsed = int(value)
