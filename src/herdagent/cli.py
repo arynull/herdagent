@@ -36,6 +36,15 @@ def _print_table(headers, rows) -> None:
 def _dump(obj) -> None:
     print(json.dumps(obj, separators=(",", ":")))
 
+def _positive_int(value: str) -> int:
+    try:
+        parsed = int(value)
+    except ValueError:
+        raise argparse.ArgumentTypeError(f"invalid int value: {value!r}")
+    if parsed < 1:
+        raise argparse.ArgumentTypeError(f"must be a positive int: {value!r}")
+    return parsed
+
 
 def _headroom_display(row) -> str:
     h = accounts.headroom(row)
@@ -382,6 +391,8 @@ def handle_task_add(args, conn) -> int:
 
 def handle_task_list(args, conn) -> int:
     rows = tasks.list(conn, status=args.status)
+    if args.limit is not None:
+        rows = rows[: args.limit]
     if args.json:
         _dump([dict(r) for r in rows])
     else:
@@ -569,6 +580,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     t_list = tp_sub.add_parser("list", help="list tasks")
     t_list.add_argument("--status", default=None)
+    t_list.add_argument("--limit", type=_positive_int, default=None)
     t_list.add_argument("--json", action="store_true")
     t_list.set_defaults(func=handle_task_list)
 
