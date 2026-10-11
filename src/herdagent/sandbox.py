@@ -1,6 +1,6 @@
 import os
 import shutil
-import subprocess
+import subprocess  # nosec B404 - argv lists only, never shell=True
 
 PROFILES = ("none", "standard", "strict")
 
@@ -39,7 +39,7 @@ def build_bwrap_args(cwd: str, profile: str) -> list[str]:
             "--dev",
             "/dev",
             "--tmpfs",
-            "/tmp",
+            "/tmp",  # nosec B108 - tmpfs mount point inside sandbox, not a host temp file
             "--bind",
             cwd,
             cwd,
@@ -56,7 +56,7 @@ def launch(
     if profile not in PROFILES:
         raise ValueError(f"unknown sandbox profile: {profile}")
     if profile == "none" or not available():
-        proc = subprocess.Popen(
+        proc = subprocess.Popen(  # nosec B603 - fixed argv list, no shell
             cmd,
             cwd=cwd,
             start_new_session=True,
@@ -65,7 +65,7 @@ def launch(
         )
         return proc, False
     argv = build_bwrap_args(cwd, profile) + list(cmd)
-    proc = subprocess.Popen(
+    proc = subprocess.Popen(  # nosec B603 - argv list from build_bwrap_args, no shell
         argv,
         cwd=cwd,
         start_new_session=True,

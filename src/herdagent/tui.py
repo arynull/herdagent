@@ -133,8 +133,8 @@ def run_dashboard(conn_factory) -> None:
             for r in acct_rows[: max(0, pane - 2)]:
                 f = _frac(r)
                 bar = _bar(f)
-                pct = "unknown" if f is None else f"{round(f * 100)}%"
-                line = f"{r['label']} {bar} {pct} 429s={r['observed_429s'] or 0}"
+                pct_str = "unknown" if f is None else f"{round(f * 100)}%"
+                line = f"{r['label']} {bar} {pct_str} 429s={r['observed_429s'] or 0}"
                 _put(stdscr, y, 0, line, max_x)
                 y += 1
             y = pane * 3

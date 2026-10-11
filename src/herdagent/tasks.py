@@ -11,6 +11,8 @@ def add(conn: sqlite3.Connection, title: str, body: str = "") -> int:
         (title, body, ts),
     )
     conn.commit()
+    if cur.lastrowid is None:
+        raise RuntimeError("insert failed: no row id")
     return int(cur.lastrowid)
 
 

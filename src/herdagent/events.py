@@ -16,6 +16,8 @@ def log(
         (ts, kind, session, account, detail),
     )
     conn.commit()
+    if cur.lastrowid is None:
+        raise RuntimeError("insert failed: no row id")
     return int(cur.lastrowid)
 
 

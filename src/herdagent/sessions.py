@@ -135,6 +135,8 @@ def start(
             account=chosen,
             detail=sandbox_profile,
         )
+    if cur.lastrowid is None:
+        raise RuntimeError("insert failed: no row id")
     return int(cur.lastrowid)
 
 

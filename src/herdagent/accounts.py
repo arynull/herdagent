@@ -48,6 +48,8 @@ def add(
     )
     conn.commit()
     log_event(conn, "account_add", account=label, detail=f"provider={provider}")
+    if cur.lastrowid is None:
+        raise RuntimeError("insert failed: no row id")
     return int(cur.lastrowid)
 
 
